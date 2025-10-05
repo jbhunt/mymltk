@@ -8,11 +8,11 @@ def sigmoid(z):
 
     return 1 / (1 + np.exp(-z))
 
-class LogisticRegressionWithGD():
+class LogisticRegressionClassifier():
     """
     """
 
-    def __init__(self, lr=0.001, max_iter=1000):
+    def __init__(self, lr=0.001, max_iter=1000, batch_size=None):
         """
         """
         
@@ -20,6 +20,7 @@ class LogisticRegressionWithGD():
         self.max_iter = max_iter
         self.weights = None
         self.bias = None
+        self.batch_size = batch_size
 
         return
     
@@ -32,12 +33,24 @@ class LogisticRegressionWithGD():
         bias = 0.0
         performance = np.full(self.max_iter, np.nan)
         for i_iter in range(self.max_iter):
-            z = X @ weights + bias
+
+            #
+            sample_indices = np.arange(m)
+            if self.batch_size is not None:
+                sample_indices = np.random.choice(sample_indices, size=self.batch_size, replace=False)
+            b = sample_indices.size
+
+            #
+            X_ = X[sample_indices]
+            y_ = y[sample_indices]
+
+            #
+            z = X_ @ weights + bias
             h = sigmoid(z)
-            loss = bce(h, y)
+            loss = bce(h, y_)
             performance[i_iter] = loss
-            dw = 1 / m * (X.T @ (h - y))
-            db = np.mean(h - y)
+            dw = 1 / b * (X_.T @ (h - y_))
+            db = np.mean(h - y_)
             weights -= (self.lr * dw)
             bias -= (self.lr * db)
 
