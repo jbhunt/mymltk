@@ -1,5 +1,5 @@
 import numpy as np
-from mymlsb.metrics import bce
+from mymltk.metrics import bce
 
 def sigmoid(z):
     """

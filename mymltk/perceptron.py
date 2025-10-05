@@ -1,5 +1,5 @@
 import numpy as np
-from mymlsb.metrics import accuracy
+from mymltk.metrics import accuracy
 
 class PerceptronClassifier():
     """
