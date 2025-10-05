@@ -1,26 +1,45 @@
 import numpy as np
 
-class SimpleLinearRegression():
+class LinearRegressionWithGD():
     """
     """
 
-    def __init__(self):
-        """
-        """
-
-        self.betas = None
-
+    def __init__(self, max_iter=1000, lr=1e-3):
+        self.max_iter = max_iter
+        self.lr = lr
+        self.weights = None
+        self.bias = None
+        self.loss = None
         return
     
     def fit(self, X, y):
         """
         """
 
-        xbar = np.mean(X)
-        ybar = np.mean(y)
-        m = (np.sum([(xi - xbar) * (yi - ybar) for xi, yi in zip(X, y)])) / (np.sum([np.power(xi - xbar, 2) for xi in X]))
-        b = np.mean(y) - (m * xbar)
-        self.betas = np.array([b, m]).reshape(-1, 1)
+        X_with_bias = np.concatenate([
+            np.ones(X.shape[0]).reshape(-1, 1),
+            X,
+        ], axis=1)
+        weights = np.zeros(X_with_bias.shape[1])
+        n = X.shape[0]
+        self.loss = np.full(self.max_iter, np.nan)
+
+        for i_step in range(self.max_iter):
+
+            # Compute the gradient
+            residuals = np.matmul(X_with_bias, weights) - y
+            gradient = np.matmul(X_with_bias.T, residuals) / n
+
+            # Update the weights
+            weights = weights - self.lr * gradient
+
+            # Record loss
+            mse = np.mean(np.power(residuals, 2))
+            self.loss[i_step] = mse
+
+        #
+        self.bias = weights[0]
+        self.weights = weights[1:]
 
         return
     
@@ -28,62 +47,21 @@ class SimpleLinearRegression():
         """
         """
 
-        return X @ self.betas[1:] + self.betas[0]
+        return X @ self.weights + self.bias
     
-class MultipleLinearRegression():
-    """
-    """
-
-    def __init__(self):
+    def score(self, X, y, metric="r2"):
         """
         """
 
-        self.betas = None
+        y_pred = self.predict(X)
+        if metric == "mse":
+            score = np.mean(np.power(y_pred - y, 2))
+        elif metric == "rmse":
+            score = np.sqrt(np.mean(np.power(y_pred - y, 2)))
+        elif metric == "r2":
+            score = np.sum(np.power(y - y_pred, 2)) / np.sum(np.power(y - y.mean(), 2))
+        else:
+            raise Exception(f"{metric} is not a supported metric")
+        score = round(score, 3)
 
-        return
-    
-    def fit(self, X, y):
-        """
-        """
-
-        X = np.hstack([np.full([X.shape[0], 1], 1), X])
-        self.betas = np.linalg.inv(X.T @ X) @ (X.T @ y)
-
-        return
-    
-    def predict(self, X):
-        """
-        """
-
-        y = X @ self.betas[1:] + self.betas[0]
-
-        return y
-    
-class RidgeRegression():
-    """
-    """
-
-    def __init__(self, lambda_=0.0):
-        """
-        """
-
-        self.betas = None
-        self.lambda_ = lambda_
-
-        return
-    
-    def fit(self, X, y):
-        """
-        """
-
-        R = np.hstack([np.ones(X.shape[0]).reshape(-1, 1), X])
-        self.betas = np.linalg.inv(R.T @ R + self.lambda_ @ np.eye(R.shape[1])) @ R.T @ y
-        self.betas = self.betas.reshape(-1, 1)
-
-        return
-    
-    def predict(self, X):
-        """
-        """
-
-        return X @ self.betas[1:] + self.betas[0]
+        return score
