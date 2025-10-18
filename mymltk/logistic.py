@@ -1,12 +1,14 @@
+import torch
 import numpy as np
-from mymltk.metrics import bce
+from mymltk.metrics import cross_entropy_binary, accuracy
+from . import helpers
 
 def sigmoid(z):
     """
     Sigmoid function
     """
 
-    return 1 / (1 + np.exp(-z))
+    return 1 / (1 + torch.exp(-z))
 
 class LogisticRegressionClassifier():
     """
@@ -21,17 +23,19 @@ class LogisticRegressionClassifier():
         self.weights = None
         self.bias = None
         self.batch_size = batch_size
+        self.loss = None
 
         return
     
     def fit(self, X, y):
         """
         """
-
+        X = helpers.to_tensor(X)
+        y = helpers.to_tensor(y)
         m, n = X.shape
-        weights = np.random.normal(size=n, loc=0, scale=0.01)
-        bias = 0.0
-        performance = np.full(self.max_iter, np.nan)
+        weights = torch.rand(n, dtype=torch.float64) * 0.01
+        bias = torch.zeros(1, dtype=torch.float64)
+        self.loss = np.full(self.max_iter, np.nan)
         for i_iter in range(self.max_iter):
 
             #
@@ -47,10 +51,9 @@ class LogisticRegressionClassifier():
             #
             z = X_ @ weights + bias
             h = sigmoid(z)
-            loss = bce(h, y_)
-            performance[i_iter] = loss
+            self.loss[i_iter] = cross_entropy_binary(h, y_)
             dw = 1 / b * (X_.T @ (h - y_))
-            db = np.mean(h - y_)
+            db = torch.mean(h - y_)
             weights -= (self.lr * dw)
             bias -= (self.lr * db)
 
@@ -58,7 +61,7 @@ class LogisticRegressionClassifier():
         self.weights = weights
         self.bias = bias
 
-        return performance
+        return
     
     def predict(self, X):
         """
@@ -72,6 +75,19 @@ class LogisticRegressionClassifier():
         """
         """
 
-        z = X @ self.weights + self.bias
+        X_ = helpers.to_tensor(X)
+        z = X_ @ self.weights + self.bias
 
         return sigmoid(z)
+    
+    def score(self, X, y, scoring="accuracy"):
+        """
+        """
+
+        y_pred = self.predict(X)
+        if scoring == "accuracy":
+            score_ = accuracy(y_pred, y)
+        else:
+            raise Exception(f"{scoring} is not a supported scoring metric")
+
+        return float(score_)
