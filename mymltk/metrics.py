@@ -31,3 +31,9 @@ def accuracy(y_pred, y_true):
 
     y_true, y_pred = _check_args(y_true, y_pred)
     return torch.sum(y_pred == y_true) / len(y_true)
+
+def mean_absolute_error(y_pred, y_true):
+    """
+    """
+    y_true, y_pred = _check_args(y_true, y_pred)
+    return torch.mean(torch.abs(y_pred - y_true))

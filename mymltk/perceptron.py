@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from mymltk.metrics import accuracy, cross_entropy_binary, missclassification_count
 
-class PerceptronClassifier():
+class RosenblattPerceptron():
     """
     """
 

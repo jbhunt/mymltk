@@ -1,14 +1,37 @@
+import torch
+from torch import nn
 import numpy as np
+from . import helpers, metrics
 
-class LinearRegressionWithGD():
+class _LinearModel(nn.Module):
     """
     """
 
-    def __init__(self, max_iter=1000, lr=1e-3):
-        self.max_iter = max_iter
+    def __init__(self, d_in=1, d_out=1):
+        """
+        """
+
+        super().__init__()
+        self.linear = nn.Linear(d_in, d_out, bias=True, dtype=torch.double)
+
+        return
+    
+    def forward(self, x):
+        """
+        """
+        z = self.linear(x)
+        return z
+    
+class LinearRegression():
+    """
+    """
+
+    def __init__(self, lr=0.001, max_iter=1000):
+        """
+        """
         self.lr = lr
-        self.weights = None
-        self.bias = None
+        self.max_iter = max_iter
+        self.model = None
         self.loss = None
         return
     
@@ -16,52 +39,55 @@ class LinearRegressionWithGD():
         """
         """
 
-        X_with_bias = np.concatenate([
-            np.ones(X.shape[0]).reshape(-1, 1),
-            X,
-        ], axis=1)
-        weights = np.zeros(X_with_bias.shape[1])
-        n = X.shape[0]
-        self.loss = np.full(self.max_iter, np.nan)
-
-        for i_step in range(self.max_iter):
-
-            # Compute the gradient
-            residuals = np.matmul(X_with_bias, weights) - y
-            gradient = np.matmul(X_with_bias.T, residuals) / n
-
-            # Update the weights
-            weights = weights - self.lr * gradient
-
-            # Record loss
-            mse = np.mean(np.power(residuals, 2))
-            self.loss[i_step] = mse
+        #
+        X_ = helpers.to_tensor(X)
+        y_ = np.atleast_2d(y).reshape(-1, 1)
+        y_ = helpers.to_tensor(y_)
 
         #
-        self.bias = weights[0]
-        self.weights = weights[1:]
+        d_in = X.shape[1]
+        d_out = y_.shape[1]
+        self.model = _LinearModel(d_in, d_out)
+        loss_fn = nn.MSELoss()
+        self.loss = np.full(self.max_iter, np.nan)
+
+        #
+        for i_epoch in range(self.max_iter):
+
+            # Zero the gradients
+            for p in self.model.parameters():
+                p.grad = None
+            
+            # Forward pass
+            z = self.model(X_)
+            loss = loss_fn(z, y_)
+            self.loss[i_epoch] = loss.detach().numpy()
+
+            # Compute gradients
+            loss.backward()
+            grad_weights = self.model.linear.weight.grad
+            grad_bias = self.model.linear.bias.grad
+
+            # Update weights and bias
+            with torch.no_grad():
+                self.model.linear.weight.add_(-1 * self.lr * grad_weights)
+                self.model.linear.bias.add_(-1 * self.lr * grad_bias)
 
         return
     
     def predict(self, X):
         """
         """
-
-        return X @ self.weights + self.bias
+        X_ = helpers.to_tensor(X)
+        z = self.model(X_)
+        return z.detach().numpy()
     
-    def score(self, X, y, metric="r2"):
-        """
-        """
-
-        y_pred = self.predict(X)
-        if metric == "mse":
-            score = np.mean(np.power(y_pred - y, 2))
-        elif metric == "rmse":
-            score = np.sqrt(np.mean(np.power(y_pred - y, 2)))
-        elif metric == "r2":
-            score = np.sum(np.power(y - y_pred, 2)) / np.sum(np.power(y - y.mean(), 2))
+    def score(self, X, y, metric="mae"):
+        y_pred = self.predict(X).ravel()
+        y_ = y.ravel()
+        if metric == "mae":
+            score = float(metrics.mean_absolute_error(y_pred, y_))
         else:
-            raise Exception(f"{metric} is not a supported metric")
-        score = round(score, 3)
+            raise Exception(f"{metric} is not a supported scoring metric")
 
         return score

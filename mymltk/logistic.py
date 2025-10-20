@@ -49,11 +49,11 @@ class LogisticRegressionClassifier():
             y_ = y[sample_indices]
 
             #
-            z = X_ @ weights + bias
-            h = sigmoid(z)
+            z = X_ @ weights + bias # logit
+            h = sigmoid(z) # probability
             self.loss[i_iter] = cross_entropy_binary(h, y_)
-            dw = 1 / b * (X_.T @ (h - y_))
-            db = torch.mean(h - y_)
+            dw = 1 / b * (X_.T @ (h - y_)) # Gradient of loss wrt weights
+            db = torch.mean(h - y_) # Gradient of loss wrt bias
             weights -= (self.lr * dw)
             bias -= (self.lr * db)
 
