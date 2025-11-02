@@ -1,4 +1,5 @@
 import numpy as np
+from torch import nn
 from sklearn.preprocessing import OneHotEncoder
 
 def relu(x):
@@ -96,6 +97,11 @@ class _FullyConnectedNeuralNetworkWithNumPy():
         self.b_out += -1 * self.lr * dL_wrt_b_out
 
         return
+    
+# TODO: Implement FC network with PyTorch
+class _FullyConnectedNeuralNetworkWithPyTorch(nn.Module):
+    """
+    """
 
 class FullyConnectedNeuralNetworkClassifier():
     """

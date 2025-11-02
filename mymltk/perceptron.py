@@ -1,8 +1,9 @@
 import torch
 import numpy as np
 from mymltk.metrics import accuracy, cross_entropy_binary, missclassification_count
+from mymltk.helpers import rescale
 
-class RosenblattPerceptron():
+class RosenblattPerceptronClassifier():
     """
     """
 
@@ -25,10 +26,14 @@ class RosenblattPerceptron():
     def fit(self, X, y):
         """
         """
-    
+
         #
-        if not (y.min() == -1 and y.max() == 1):
-            raise Exception("Labels must be in the range -1 to +1")
+        n_classes = len(np.unique(y))
+        if n_classes > 2:
+            raise Exception(f"Number of classes ({n_classes}) exceeds 2")
+
+        #
+        y = rescale(y, -1, 1)
         
         #
         if type(X) == np.ndarray:
@@ -60,6 +65,7 @@ class RosenblattPerceptron():
             self.loss[i_iter] = loss
             if loss == 0:
                 break
+
             i_iter += 1
 
         self.weights = weights
@@ -71,7 +77,9 @@ class RosenblattPerceptron():
         """
 
         X_ = torch.hstack([torch.from_numpy(X), torch.ones([X.shape[0], 1])])
-        return torch.sign(X_ @ self.weights)
+        y_pred = torch.sign(X_ @ self.weights)
+        y_pred = rescale(y_pred, 0, 1)
+        return y_pred
     
     def score(self, X, y, scoring="accuracy"):
         """
