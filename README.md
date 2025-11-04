@@ -1,6 +1,6 @@
 # mymltk
 ## Overview
-This is my personal machine learning (ML) toolkit that contains implementations of various ML techniques using PyTorch (or sometimes coded from scratch with NumPy just as an exercise). All of the implementations have an interface modeled after Scikit-Learn's estimators. Each model have a `fit`, `predict`, and `score` method. Here are the methods that I've implemented so far:
+This is my personal machine learning (ML) toolkit that contains implementations of various ML techniques using PyTorch (or sometimes coded from scratch with NumPy as an exercise). All of the implementations have an interface modeled after Scikit-Learn's estimators. Each model have a `fit`, `predict`, and `score` method. Here are the methods that I've implemented so far:
 - K-nearest neighbors clustering algorithm
 - Linear regression regressor (via GD/SGD)
 - Logistic regression classifier
