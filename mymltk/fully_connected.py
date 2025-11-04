@@ -4,6 +4,7 @@ from torch import nn
 from torch import optim
 from sklearn.preprocessing import OneHotEncoder
 from .helpers import to_tensor
+from .metrics import accuracy
 
 def relu(x):
     """
@@ -114,14 +115,15 @@ class _FullyConnectedNeuralNetworkWithPyTorch(nn.Module):
     """
     """
 
-    def __init__(self, input_size=1, hidden_size=1, output_size=1):
+    def __init__(self, input_size=1, hidden_size=1, output_size=1, device="cpu"):
         """
         """
 
         super().__init__()
-        self.l_hidden = nn.Linear(input_size, hidden_size, dtype=torch.float)
+        self.device = device
+        self.l_hidden = nn.Linear(input_size, hidden_size, dtype=torch.float, device=device)
         self.relu_1 = nn.ReLU()
-        self.l_out = nn.Linear(hidden_size, output_size, dtype=torch.float)
+        self.l_out = nn.Linear(hidden_size, output_size, dtype=torch.float, device=device)
         # self.sm = nn.Softmax(dim=1)
 
         return
@@ -130,7 +132,7 @@ class _FullyConnectedNeuralNetworkWithPyTorch(nn.Module):
         """
         """
 
-        X_ = to_tensor(X).float()
+        X_ = to_tensor(X).float().to(self.device)
         z_1 = self.l_hidden(X_)
         a_1 = self.relu_1(z_1)
         z_2 = self.l_out(a_1)
@@ -142,7 +144,7 @@ class FullyConnectedNeuralNetworkClassifier():
     """
     """
 
-    def __init__(self, hidden_size=5, lr=0.001, max_iter=1000, backend="numpy"):
+    def __init__(self, hidden_size=5, lr=0.001, max_iter=1000, backend="numpy", device=None):
         """
         """
 
@@ -153,6 +155,10 @@ class FullyConnectedNeuralNetworkClassifier():
         self.encoder = OneHotEncoder(sparse_output=False)
         self.loss = None
         self.backend = backend
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
 
         return
     
@@ -176,11 +182,16 @@ class FullyConnectedNeuralNetworkClassifier():
         """
         """
 
-        X_ = torch.from_numpy(X).float()
+        X_ = torch.from_numpy(X).float().to(self.device)
         y_encoded = self.encoder.fit_transform(y.reshape(-1, 1))
-        y_indices = torch.from_numpy(y_encoded.argmax(axis=1)).long() 
+        y_indices = torch.from_numpy(y_encoded.argmax(axis=1)).long().to(self.device)
         n_samples, n_features = X.shape
-        self.model = _FullyConnectedNeuralNetworkWithPyTorch(n_features, self.hidden_size, y_encoded.shape[1])
+        self.model = _FullyConnectedNeuralNetworkWithPyTorch(
+            input_size=n_features,
+            hidden_size=self.hidden_size,
+            output_size=y_encoded.shape[1],
+            device=self.device
+        )
         self.loss = np.full(self.max_iter, np.nan)
         loss_fn = nn.CrossEntropyLoss()
         optimizer = optim.SGD(self.model.parameters(), lr=self.lr)
@@ -217,11 +228,19 @@ class FullyConnectedNeuralNetworkClassifier():
             y_hat = softmax(logits)
         y_pred = np.full_like(y_hat, 0)
         y_pred[np.arange(y_hat.shape[0]), np.argmax(y_hat, axis=1)] = 1
-        y_pred = self.encoder.inverse_transform(y_pred.reshape(-1, 2))
+        y_pred = self.encoder.inverse_transform(y_pred.reshape(-1, 2)).flatten()
+
         return y_pred
     
-    def score(self, X, y):
+    def score(self, X, y, scoring="accuracy"):
         """
         """
 
-        return
+        y_pred = self.predict(X)
+        y_true = y.flatten()
+        if scoring == "accuracy":
+            score_ = accuracy(y_pred, y_true)
+        else:
+            raise Exception(f"{scoring} is not a supported scoring metric")
+
+        return float(score_)
