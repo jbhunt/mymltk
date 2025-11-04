@@ -1,6 +1,9 @@
 import numpy as np
+import torch
 from torch import nn
+from torch import optim
 from sklearn.preprocessing import OneHotEncoder
+from .helpers import to_tensor
 
 def relu(x):
     """
@@ -32,7 +35,7 @@ def cross_entropy_loss(y_pred, y_true):
     """
 
     y_true = np.clip(y_true, 1e-12, np.inf)
-    return -1 * np.sum(y_pred * np.log(y_true), axis=1)
+    return -1 * np.sum(y_true * np.log(y_pred), axis=1)
 
 class _FullyConnectedNeuralNetworkWithNumPy():
     """
@@ -72,15 +75,15 @@ class _FullyConnectedNeuralNetworkWithNumPy():
 
         return self.a_2
     
-    def backward(self, y):
+    def backward(self, y_true):
         """
         """
 
         # For scaling gradients to the batch size
-        n_samples = len(y)
+        n_samples = len(y_true)
 
         # Partial derivatives for output layer
-        dL_wrt_z_2 = self.y_hat - y
+        dL_wrt_z_2 = self.y_hat - y_true
         dL_wrt_W_out = self.a_1.T @ dL_wrt_z_2 / n_samples
         dL_wrt_b_out = np.sum(dL_wrt_z_2, axis=0, keepdims=True) / n_samples
 
@@ -98,16 +101,48 @@ class _FullyConnectedNeuralNetworkWithNumPy():
 
         return
     
-# TODO: Implement FC network with PyTorch
+    def zero_grad(self):
+        """
+        """
+
+        return
+    
+    def __call__(self, X):
+        return self.forward(X)
+    
 class _FullyConnectedNeuralNetworkWithPyTorch(nn.Module):
     """
     """
+
+    def __init__(self, input_size=1, hidden_size=1, output_size=1):
+        """
+        """
+
+        super().__init__()
+        self.l_hidden = nn.Linear(input_size, hidden_size, dtype=torch.float)
+        self.relu_1 = nn.ReLU()
+        self.l_out = nn.Linear(hidden_size, output_size, dtype=torch.float)
+        # self.sm = nn.Softmax(dim=1)
+
+        return
+
+    def forward(self, X):
+        """
+        """
+
+        X_ = to_tensor(X).float()
+        z_1 = self.l_hidden(X_)
+        a_1 = self.relu_1(z_1)
+        z_2 = self.l_out(a_1)
+        # y_hat = self.sm(z_2)
+
+        return z_2
 
 class FullyConnectedNeuralNetworkClassifier():
     """
     """
 
-    def __init__(self, hidden_size=5, lr=0.001, max_iter=1000):
+    def __init__(self, hidden_size=5, lr=0.001, max_iter=1000, backend="numpy"):
         """
         """
 
@@ -117,10 +152,11 @@ class FullyConnectedNeuralNetworkClassifier():
         self.model = None
         self.encoder = OneHotEncoder(sparse_output=False)
         self.loss = None
+        self.backend = backend
 
         return
     
-    def fit(self, X, y):
+    def _fit_with_numpy_backend(self, X, y):
         """
         """
 
@@ -129,9 +165,43 @@ class FullyConnectedNeuralNetworkClassifier():
         self.model = _FullyConnectedNeuralNetworkWithNumPy(n_features, self.hidden_size, y_encoded.shape[1])
         self.loss = np.full(self.max_iter, np.nan)
         for i_epoch in range(self.max_iter):
-            a_2 = self.model.forward(X)
-            self.loss[i_epoch] = cross_entropy_loss(a_2, y_encoded).mean()
+            self.model.zero_grad()
+            y_hat = self.model.forward(X)
+            self.loss[i_epoch] = cross_entropy_loss(y_hat, y_encoded).mean()
             self.model.backward(y_encoded)
+
+        return
+    
+    def _fit_with_pytorch_backend(self, X, y):
+        """
+        """
+
+        X_ = torch.from_numpy(X).float()
+        y_encoded = self.encoder.fit_transform(y.reshape(-1, 1))
+        y_indices = torch.from_numpy(y_encoded.argmax(axis=1)).long() 
+        n_samples, n_features = X.shape
+        self.model = _FullyConnectedNeuralNetworkWithPyTorch(n_features, self.hidden_size, y_encoded.shape[1])
+        self.loss = np.full(self.max_iter, np.nan)
+        loss_fn = nn.CrossEntropyLoss()
+        optimizer = optim.SGD(self.model.parameters(), lr=self.lr)
+        for i_epoch in range(self.max_iter):
+            logits = self.model(X_)
+            loss = loss_fn(logits, y_indices)
+            self.loss[i_epoch] = round(loss.item(), 6)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+        return
+    
+    def fit(self, X, y):
+        """
+        """
+
+        if self.backend in ["np", "numpy", "NumPy"]:
+            self._fit_with_numpy_backend(X, y)
+        elif self.backend in ["pytorch", "PyTorch", "torch"]:
+            self._fit_with_pytorch_backend(X, y)
 
         return
     
@@ -139,8 +209,15 @@ class FullyConnectedNeuralNetworkClassifier():
         """
         """
 
-        y_encoded = self.model.forward(X)
-        y_pred = self.encoder.inverse_transform(y_encoded)
+        if self.backend in ["np", "numpy", "NumPy"]:
+            y_hat = self.model(X)
+        elif self.backend in ["pytorch", "PyTorch", "torch"]:
+            with torch.no_grad():
+                logits = self.model(X).numpy()
+            y_hat = softmax(logits)
+        y_pred = np.full_like(y_hat, 0)
+        y_pred[np.arange(y_hat.shape[0]), np.argmax(y_hat, axis=1)] = 1
+        y_pred = self.encoder.inverse_transform(y_pred.reshape(-1, 2))
         return y_pred
     
     def score(self, X, y):
