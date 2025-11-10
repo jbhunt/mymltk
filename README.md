@@ -6,6 +6,8 @@ This is my personal machine learning (ML) toolkit that contains implementations 
 - Logistic regression classifier
 - Rosenblatt perceptron classifier
 - Fully connected neural network classifier
+- CNN a la AlexNet for image classification
+- RNN for sentiment classification using sequences of words
 
 ## Classification
 Here's a summary of classifier performance on a binary classification task using the 
