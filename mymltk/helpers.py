@@ -1,6 +1,12 @@
 import torch
 import numpy as np
 
+def is_tensor(x):
+    """
+    """
+
+    return type(x) == torch.Tensor
+
 def to_tensor(x, dtype=torch.double):
     """
     """
