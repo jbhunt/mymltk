@@ -4,8 +4,9 @@ import numpy as np
 from collections import Counter
 import pathlib as pl
 import h5py
+from torch.utils.data import Dataset
 
-class CustomDataset():
+class CustomDatasetMixin():
     """
     """
 
@@ -37,7 +38,7 @@ class CustomDataset():
     def y_test(self):
         return self._y_test
 
-class IMBDBDataset(CustomDataset):
+class IMBDBDataset(CustomDatasetMixin):
     """
     """
 
@@ -114,23 +115,26 @@ class IMBDBDataset(CustomDataset):
 
         return
     
-class BrainToText2025(CustomDataset):
+class BrainToText2025(Dataset, CustomDatasetMixin):
     """
     """
 
-    def __init__(self, root=None, max_seq_len=int(0.02 * 1000 * 15)):
+    def __init__(self, root=None, seq_len=int(0.02 * 1000 * 15), mode="power"):
         """
         """
 
         super().__init__()
         self.root = root
-        self.max_seq_len = max_seq_len
+        self.seq_len = seq_len
+        self.mode = mode
         self._z_train = None
         self._z_test = None
+        self._seq_lens_train = None
+        self._seq_lens_test = None
     
         return
     
-    def load(self):
+    def load(self, n_sessions=None, padding_value=0):
         """
         """
 
@@ -143,34 +147,51 @@ class BrainToText2025(CustomDataset):
         self._y_test = list()
         self._z_train = list()
         self._z_test = list()
+        self._seq_lens_train = list()
+        self._seq_lens_test = list()
+
+        #
+        if self.mode == "spikes":
+            start_index = 0
+            stop_index = 256
+        elif self.mode == "power":
+            start_index = 256
+            stop_index = None
 
         #
         for session_index, folder in enumerate(pl.Path(self.root).iterdir()):
+            if n_sessions is not None and session_index + 1 > n_sessions:
+                break
             for file in folder.iterdir():
                 if "test" in file.name:
                     continue
-                X, y, z = list(), list(), list()
+                X, y, seq_lens = list(), list(), list()
                 with h5py.File(file, 'r') as stream:
                     for trial_index in stream.keys():
-                        xi = stream[trial_index]["input_features"][:self.max_seq_len, :] # T time bins x N features
+                        xi = np.array(stream[trial_index]["input_features"][:self.seq_len, start_index: stop_index]) #  T time bins x N channels
                         seq_len, n_features = xi.shape
-                        xi_flat = xi.flatten() # Size of T * N
-                        if seq_len < self.max_seq_len:
-                            n_elements = (self.max_seq_len * n_features) - len(xi_flat)
-                            xi_flat = np.pad(xi_flat, [0, n_elements], constant_values=np.nan)
-                        X.append(xi_flat)
+                        seq_lens.append(seq_len)
+                        if seq_len < self.seq_len:
+                            n_elements = self.seq_len - seq_len
+                            padding = np.full([n_elements, n_features], padding_value)
+                            xi = np.vstack([xi, padding])
                         yi = stream[trial_index]["seq_class_ids"][:]
+                        X.append(xi)
                         y.append(yi)
-                        z.append(session_index)
-                for xi, yi, zi in zip(X, y, z):
+                X = np.array(X)
+                n_trials, _, _ = X.shape
+                z = np.tile(np.nanmean(X, axis=(0, 1)), n_trials).reshape(n_trials, -1)
+                for xi, yi, zi, seq_len in zip(X, y, z, seq_lens):
                     if "train" in file.name:
                         self._X_train.append(xi)
                         self._y_train.append(yi)
                         self._z_train.append(zi)
+                        self._seq_lens_train.append(seq_len)
                     elif "val" in file.name:
                         self._X_test.append(xi)
                         self._y_test.append(yi)
-                        self._z_test.append(zi)
+                        self._z_test.append(zi)    
+                        self._seq_lens_test.append(seq_len)      
 
         #
         self._X_train = np.array(self._X_train)
@@ -179,6 +200,8 @@ class BrainToText2025(CustomDataset):
         self._y_test = np.array(self._y_test)
         self._z_train = np.array(self._z_train)
         self._z_test = np.array(self._z_test)
+        self._seq_lens_train = np.array(self._seq_lens_train)
+        self._seq_lens_test = np.array(self._seq_lens_test)
 
         return
     
@@ -189,3 +212,17 @@ class BrainToText2025(CustomDataset):
     @property
     def z_test(self):
         return self._z_test
+    
+    @property
+    def seq_lens_train(self):
+        return self._seq_lens_train
+    
+    @property
+    def seq_lens_test(self):
+        return self._seq_lens_test
+    
+    def __len__(self):
+        return self.X_train.shape[0]
+    
+    def __getitem__(self, index):
+        return self.X_train[index], self.y_train[index], self.z_train[index], self.seq_lens_train[index]
