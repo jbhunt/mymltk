@@ -115,22 +115,115 @@ class IMBDBDataset(CustomDatasetMixin):
 
         return
     
+class PhonemeVocabulary():
+    """
+    """
+
+    PAD = 0
+    BOS = 1
+    EOS = 2
+    map = {
+        0: "<PAD>",
+        1: "<BOS>",
+        2: "<EOS>",
+        3: "<BLANK>",
+        4: "AA",
+        5: "AE",
+        6: "AH",
+        7: "AO",
+        8: "AW",
+        9: 'AY',
+        10: 'B',
+        11: 'CH',
+        12: 'D',
+        13: 'DH',
+        14: 'EH',
+        15: 'ER',
+        16: 'EY',
+        17: 'F',
+        18: 'G',
+        19: 'HH',
+        20: 'IH', 
+        21: 'IY',
+        22: 'JH',
+        23: 'K',
+        24: 'L',
+        25: 'M',
+        26: 'N',
+        27: 'NG',
+        28: 'OW',
+        29: 'OY',
+        30: 'P',
+        31: 'R',
+        32: 'S',
+        33: 'SH',
+        34: 'T',
+        35: 'TH',
+        36: 'UH',
+        37: 'UW',
+        38: 'V',
+        39: 'W',
+        40: 'Y',
+        41: 'Z',
+        42: 'ZH',
+        43: '<SILENCE>'
+    }
+
+    def __init__(self):
+        """
+        """
+
+        return
+    
+    def insert_special_tokens(self, in_seq, padding_token=0):
+        """
+        """
+
+        in_seq = np.array(in_seq)
+        out_seq = np.copy(in_seq)
+        mask = np.array(out_seq) != padding_token
+        out_seq[mask] += 2
+        i = np.where(in_seq ==  0)[0][0]
+        out_seq = np.insert(out_seq, i, self.EOS)
+        out_seq = np.concatenate([
+            np.array([self.BOS]),
+            out_seq
+        ])
+
+        return out_seq
+    
+    def decode(self, in_seq):
+        """
+        """
+
+        out_seq = list()
+        for el in in_seq:
+            token = self.map[el]
+            out_seq.append(token)
+
+        return np.array(out_seq)
+    
+    @property
+    def size(self):
+        return max(self.map.keys()) + 1
+    
 class BrainToText2025(Dataset, CustomDatasetMixin):
     """
     """
 
-    def __init__(self, root=None, seq_len=int(0.02 * 1000 * 15), mode="power"):
+    def __init__(self, root=None, src_seq_len=int(0.02 * 1000 * 15), mode="power"):
         """
         """
 
         super().__init__()
         self.root = root
-        self.seq_len = seq_len
+        self.src_seq_len = src_seq_len
         self.mode = mode
         self._z_train = None
         self._z_test = None
-        self._seq_lens_train = None
-        self._seq_lens_test = None
+        self._src_seq_lens_train = None
+        self._src_seq_lens_test = None
+        self.vocab = PhonemeVocabulary()
     
         return
     
@@ -147,8 +240,8 @@ class BrainToText2025(Dataset, CustomDatasetMixin):
         self._y_test = list()
         self._z_train = list()
         self._z_test = list()
-        self._seq_lens_train = list()
-        self._seq_lens_test = list()
+        self._src_seq_lens_train = list()
+        self._src_seq_lens_test = list()
 
         #
         if self.mode == "spikes":
@@ -163,45 +256,50 @@ class BrainToText2025(Dataset, CustomDatasetMixin):
             if n_sessions is not None and session_index + 1 > n_sessions:
                 break
             for file in folder.iterdir():
+                is_test_data = False
                 if "test" in file.name:
-                    continue
-                X, y, seq_lens = list(), list(), list()
+                    is_test_data = True
+                X, y, src_seq_lens, tgt_seq_lens = list(), list(), list(), list()
                 with h5py.File(file, 'r') as stream:
                     for trial_index in stream.keys():
-                        xi = np.array(stream[trial_index]["input_features"][:self.seq_len, start_index: stop_index]) #  T time bins x N channels
-                        seq_len, n_features = xi.shape
-                        seq_lens.append(seq_len)
-                        if seq_len < self.seq_len:
-                            n_elements = self.seq_len - seq_len
+                        xi = np.array(stream[trial_index]["input_features"][:self.src_seq_len, start_index: stop_index]) #  T time bins x N channels
+                        src_seq_len, n_features = xi.shape
+                        src_seq_lens.append(src_seq_len)
+                        if src_seq_len < self.src_seq_len:
+                            n_elements = self.src_seq_len - src_seq_len
                             padding = np.full([n_elements, n_features], padding_value)
                             xi = np.vstack([xi, padding])
-                        yi = stream[trial_index]["seq_class_ids"][:]
-                        X.append(xi)
+
+                        if is_test_data == False:
+                            yi = stream[trial_index]["seq_class_ids"][:]
+                            yi = self.vocab.insert_special_tokens(yi)
+                        else:
+                            yi = np.nan
                         y.append(yi)
+                        X.append(xi)
                 X = np.array(X)
                 n_trials, _, _ = X.shape
                 z = np.tile(np.nanmean(X, axis=(0, 1)), n_trials).reshape(n_trials, -1)
-                for xi, yi, zi, seq_len in zip(X, y, z, seq_lens):
-                    if "train" in file.name:
+                for xi, yi, zi, src_seq_len in zip(X, y, z, src_seq_lens):
+                    if "train" in file.name or "val" in file.name:
                         self._X_train.append(xi)
                         self._y_train.append(yi)
                         self._z_train.append(zi)
-                        self._seq_lens_train.append(seq_len)
-                    elif "val" in file.name:
+                        self._src_seq_lens_train.append(src_seq_len)
+                    elif "test" in file.name:
                         self._X_test.append(xi)
-                        self._y_test.append(yi)
                         self._z_test.append(zi)    
-                        self._seq_lens_test.append(seq_len)      
+                        self._src_seq_lens_test.append(src_seq_len)      
 
         #
         self._X_train = np.array(self._X_train)
         self._y_train = np.array(self._y_train)
         self._X_test = np.array(self._X_test)
-        self._y_test = np.array(self._y_test)
+        self._y_test = None
         self._z_train = np.array(self._z_train)
         self._z_test = np.array(self._z_test)
-        self._seq_lens_train = np.array(self._seq_lens_train)
-        self._seq_lens_test = np.array(self._seq_lens_test)
+        self._seq_lens_train = np.array(self._src_seq_lens_train)
+        self._seq_lens_test = np.array(self._src_seq_lens_test)
 
         return
     
