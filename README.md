@@ -8,11 +8,12 @@ This is my personal machine learning (ML) toolkit that contains implementations 
 - Fully connected neural network classifier
 - CNN a la AlexNet for image classification
 - RNN for sentiment classification using sequences of words
+- ViT (visual transformer) for object detection (demo'ed with the CIFAR-10 dataset)
 
-## Classification
-Here's a summary of classifier performance on a binary classification task using the 
+## Simple (binary) classification
+Here's are some examples of classifier performance on a binary classification task using the 
 [breast cancer Wisconsin dataset](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_breast_cancer.html):
 
 ![](/img/classifier_performance.png)
 
-Each confusion matrix shows the fraction of true labels from a test dataset that were correcty or incorrectly labeled by each classifier. Estimates of test performance were bootstrapped using stratified random resampling of the training and test datasets (n=100 shuffles, training fraction=0.8, test fraction=0.2). The square brackets show the 95% confidence interval for each estimate.
+Each confusion matrix shows the fraction of true labels from a test dataset that were correcty or incorrectly labeled by each classifier. Estimates of test performance were bootstrapped using stratified random resampling of the training and test splits (n=100 shuffles, training fraction=0.8, test fraction=0.2). The square brackets show the 95% confidence interval for each estimate.
