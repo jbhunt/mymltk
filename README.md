@@ -22,7 +22,7 @@ Each confusion matrix shows the fraction of true labels from a test dataset that
 Here's an example using my implementation of a vanilla visual transformer ([Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929)) to classify the handwritten digits dataset:
 
 <p align="center">
-  <img src="data/img/digits_classification.png" width="300">
+  <img src="data/img/digits_classification.png" width="500">
 </p>
 
 The confusion matrix shows the fraction of true labels from a test dataset that were correctly or incorrectly labeled by the ViT. Estimates were boostrapped as in the previous example.
