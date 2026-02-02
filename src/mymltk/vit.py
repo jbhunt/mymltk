@@ -2,6 +2,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import numpy as np
+from sklearn.datasets import load_digits
+from torch.utils.data import TensorDataset, random_split, DataLoader
+from torch import optim
+from sklearn.metrics import confusion_matrix
+from matplotlib import pyplot as plt
 
 class LearnablePositionalEncoding(nn.Module):
     """
@@ -120,7 +125,7 @@ class SelfAttentionBlock(nn.Module):
 
         return
     
-    def forward(self, seq, mask):
+    def forward(self, seq, mask=None):
         """
         """
 
@@ -176,11 +181,11 @@ class EncoderLayer(nn.Module):
 
         return
     
-    def forward(self, seq, mask):
+    def forward(self, seq, mask=None):
         """
         """
 
-        x = self.attn(seq)
+        x = self.attn(seq , mask)
         x = self.ff(x)
 
         return x
@@ -229,6 +234,8 @@ class VisualTransformerClassifier(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+        return
+
     def _patchify(self, images):
         """
         Patchify images
@@ -271,8 +278,120 @@ class VisualTransformerClassifier(nn.Module):
 
         return output
     
+# TODO: Implement these demos
 def demo_with_cifar():
     """
     """
 
     return
+
+def demo_with_digits(
+    n_runs=30,
+    patch_size=2,
+    d_model=64,
+    d_ff=256,
+    n_heads=4,
+    n_layers=1,
+    lr=1e-4,
+    max_iter=5,
+    batch_size=64,
+    device=None,
+    figsize=(5, 4)
+    ):
+    """
+    """
+
+    #
+    digits = load_digits()
+    X = torch.from_numpy(digits.data).to(dtype=torch.float32).reshape(
+        -1, 8, 8
+    ).unsqueeze(1).repeat(1, 3, 1, 1)
+    y = torch.from_numpy(digits.target).to(dtype=torch.long)
+    ds = TensorDataset(X, y)
+
+    #
+    clf = VisualTransformerClassifier(
+        patch_size,
+        d_model,
+        d_ff,
+        n_heads,
+        n_layers,
+        n_classes=10,
+        device=device
+    )
+
+    #
+    cms = list()
+    for i_run in range(n_runs):
+
+        #
+        end = "\r" if i_run + 1 < n_runs else "\n"
+        print(f"Working on run {i_run + 1} out of {n_runs}")
+
+        #
+        clf.apply(clf._init_weights)
+
+        #
+        ds_train, ds_test = random_split(ds, lengths=[0.8, 0.2])
+        loader_train = DataLoader(ds_train, batch_size, shuffle=True)
+        # loader_test = DataLoader(ds_test, batch_size, shuffle=False)
+
+        #
+        loss_fn = nn.CrossEntropyLoss()
+        optimizer = optim.AdamW(clf.parameters(), lr=lr)
+
+        #
+        for i_epoch in range(max_iter):
+            
+            #
+            clf.train()
+            for X_b, y_b in loader_train:
+
+                # Foward pass
+                X_b = X_b.to(device=clf.device)
+                y_b = y_b.to(device=clf.device)
+                logits = clf(X_b)
+
+                # Backprop
+                loss = loss_fn(logits, y_b)
+                # print(loss.item())
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+            #
+            clf.eval()
+            with torch.no_grad():
+                pass
+
+        #
+        clf.eval()
+        with torch.no_grad():
+            X, y_true = ds_test[:]
+            logits = clf(X)
+            y_pred = torch.argmax(logits, dim=1)
+
+        #
+        cm = confusion_matrix(y_true, y_pred)
+        cms.append(cm)
+    
+    #
+    cms = np.array(cms)
+    row_sums = np.expand_dims(cms.sum(-1), -1)
+    cms_normed = cms / row_sums
+
+    #
+    fig, ax = plt.subplots()
+    im = ax.imshow(cms_normed.mean(0), vmin=0, vmax=1)
+    ax.set_xticks(np.arange(0, 10))
+    ax.set_yticks(np.arange(0, 10))
+    ax.set_xticklabels(np.arange(0, 10))
+    ax.set_yticklabels(np.arange(0, 10))
+    ax.set_xlabel("True labels")
+    ax.set_ylabel("Predicted labels")
+    cb = fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.05, pad=0.05,label="Frac. of true labels", shrink=0.8, aspect=10)
+    fig.set_figwidth(figsize[0])
+    fig.set_figheight(figsize[1])
+    fig.tight_layout()
+
+    return fig, [ax,], cms
